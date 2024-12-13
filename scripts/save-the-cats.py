@@ -21,7 +21,7 @@ from contextvars import ContextVar
 from functools import partial
 from http.client import responses
 from io import BytesIO
-from itertools import chain
+from itertools import chain, product
 from pathlib import Path
 from typing import Any
 
@@ -42,35 +42,29 @@ get_cat_id = cat_id_var.get
 consume: Callable[[Iterable[Any]], Any] = partial(deque, maxlen=0)
 
 is_bright_enough = (100, 100, 100).__lt__
+is_dark_enough = (100, 100, 100).__ge__
 
 
-def get_schroedinger_cat_box(
-    cat_name: str,
-    *,
-    cache_dir: Path = CACHE_DIR,
-) -> imagelib.Image:
-    """Check if we have our boxed cat in the cache or download it from the Internet."""
-    try:
-        box = (cache_fn := cache_dir / cat_name).read_bytes()
-        print(
-            f"🛈 Pulled the Schroedinger cat in danger called {cat_name} from the cache "
-            "to not make Schroedinger angry\n",
-            end="",
-        )
-    except FileNotFoundError:  # the cat contents weren't found in our cache
-        box_room = httpx.get(INTERNET_CAT_URL_TEMPLATE.format(cat_name))
-        box = box_room.read()  # find the box in the room
-        cache_fn.write_bytes(box)
-        print(
-            f"🛈 Pulled the Schroedinger cat in danger called {cat_name} "
-            "from the Internet and saved its contents in our cache\n",
-            end="",
-        )
-    return imagelib.open(BytesIO(box))  # let's view our box cat as an image
+def get_box_vertices(
+    image_size: tuple[int, int],
+    pixels: Any,
+    predicate: Callable[[tuple[int, int, int]], bool],
+) -> tuple[int, ...]:
+    """
+    Find the vertices of the box where the cat is trapped.
 
+    Parameters
+    ----------
+    image_size
+        Tuple containing the width and height of the image.
+    pixels
+        Pixel data of the image.
 
-def get_box_vertices(image_size: tuple[int, int], pixels: Any) -> tuple[int, ...]:
-    """Find the vertices of the box where the cat is trapped."""
+    Returns
+    -------
+    tuple
+        A tuple (left, top, right, bottom) representing the boundary indices.
+    """
     axes = [image_size[1] // 2, 0]  # y, x
     vertices: tuple[list[int], list[int]] = (
         [],
@@ -94,7 +88,7 @@ def get_box_vertices(image_size: tuple[int, int], pixels: Any) -> tuple[int, ...
                         break
                     continue
                 pixel_tracker += 1
-                if is_bright_enough(
+                if predicate(
                     pixels[
                         (axis_value, other_axis_value)
                         if axis < other_axis
@@ -110,9 +104,67 @@ def get_box_vertices(image_size: tuple[int, int], pixels: Any) -> tuple[int, ...
     return tuple(chain.from_iterable(vertices))
 
 
+def extract_frame(image: imagelib.Image) -> imagelib.Image:
+    """
+    Dynamically detect the frame of the image and make its inside transparent.
+
+    Parameters
+    ----------
+    image
+        The input image.
+
+    Returns
+    -------
+    imagelib.Image
+        A new image with the detected frame made transparent.
+    """
+    pixels = image.load()
+    width, height = image.size
+
+    left, top, right, bottom = get_box_vertices(
+        (width, height), pixels, predicate=is_dark_enough
+    )
+
+    for x, y in product(range(left, right), range(top, bottom)):
+        image.putpixel((x, y), (0, 0, 0, 0))  # todo: any faster way?
+
+    return image
+
+
+def get_schroedinger_cat_box(
+    cat_name: str,
+    *,
+    cache_dir: Path = CACHE_DIR,
+) -> imagelib.Image:
+    """
+    Check if we have our boxed cat in the cache or download it from the Internet.
+    """
+    try:
+        box = (cache_fn := cache_dir / cat_name).read_bytes()
+        print(
+            f"🛈 Pulled the Schroedinger cat in danger called {cat_name} from the cache "
+            "to not make Schroedinger angry\n",
+            end="",
+        )
+    except FileNotFoundError:  # the cat contents weren't found in our cache
+        box_room = httpx.get(INTERNET_CAT_URL_TEMPLATE.format(cat_name))
+        box = box_room.read()  # find the box in the room
+        cache_fn.write_bytes(box)
+        print(
+            f"🛈 Pulled the Schroedinger cat in danger called {cat_name} "
+            "from the Internet and saved its contents in our cache\n",
+            end="",
+        )
+    return imagelib.open(BytesIO(box))  # let's view our box cat as an image
+
+
 def unbox_schroedinger_cat(image: imagelib.Image) -> imagelib.Image:
-    """Unbox the cat (50% chance of survival)."""
-    return image.crop(get_box_vertices(image.size, image.load()))  # type: ignore[arg-type]
+    """
+    Unbox the cat (50% chance of survival).
+    """
+    return image.crop(
+        get_box_vertices(image.size, image.load(), predicate=is_bright_enough)  # type: ignore[arg-type]
+    )
 
 
 def save_cat(
@@ -140,6 +192,13 @@ def save_cat(
     cat.save(shelter)  # type: ignore[arg-type]  # this is correct, shelter *should match* PathLike[str]
     print(f"✔ The cat named {cat_name} was saved! (In {shelter})\n", end="")
 
+    if cat_id == 100:  # todo: formalize? control via a parameter?
+        frame = extract_frame(cat.copy())
+        # ↑ we'll probably detect boundaries dynamically as we do with detecting the frame itself
+        # we assume the frame has minimum 1px border but we can support arbitrary dynamic width
+        frame.save(frame_fn := dest_dir / "frame.png")
+        print(f"✔ Frame saved to {frame_fn}!\n", end="")
+
 
 def save_cats() -> None:
     pixel_counts: dict[int, int] = {}
@@ -148,11 +207,7 @@ def save_cats() -> None:
         max_workers=8,
         thread_name_prefix="cat-saving-thread-",
     ) as executor:
-        consume(
-            executor.map(
-                partial(save_cat, pixel_counts=pixel_counts), map(int, responses)
-            )
-        )
+        executor.map(partial(save_cat, pixel_counts=pixel_counts), map(int, responses))
 
 
 if __name__ == "__main__":
