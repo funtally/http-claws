@@ -170,10 +170,10 @@ def get_frame_vertices(
         other_axis = (axis + 1) % 2
         dim = image_size[axis]
 
-        # we check both lhs and rhs 'at the same time'
         for dist in range(dim):
             # key: #0, #1
             n_filled = 0
+           # we check both lhs and rhs 'at the same time'
             for key, axis_value in enumerate((dist, dim - dist - 1)):
                 # only feed vertices one item per list for every axis
                 n_filled += (filled := len(vertices[key]) > axis)
