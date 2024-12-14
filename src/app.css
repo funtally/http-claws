@@ -1,0 +1,244 @@
+/**
+Insolently copied from <https://github.com/httpcats/http.cat/blob/7881933d93389c028a350bd7ff81590fa1e25301/app/globals.css>.
+
+Copyright (c) 2015 Rogério Vicente
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"),
+to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense,
+and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
+WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+**/
+
+@import "tailwindcss/base";
+@import "tailwindcss/components";
+@import "tailwindcss/utilities";
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+:root {
+  --bg-color-light: #fff;
+  --text-color-light: #000;
+  --bg-color-dark: #222;
+  --text-color-dark: #fff;
+  --bg-color-elevation1: #444;
+  --interactive: #d0383e;
+
+  --text-color: var(--text-color-light);
+  --bg-color: var(--bg-color-light);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --text-color: var(--text-color-dark);
+    --bg-color: var(--bg-color-dark);
+  }
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+    Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+  letter-spacing: 0;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  color: var(--text-color);
+  background-color: var(--bg-color);
+}
+
+code {
+  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
+    monospace;
+}
+
+p {
+  margin-top: 1em;
+  margin-bottom: 1em;
+}
+
+.info {
+  background-color: rgba(0, 133, 242, 0.1);
+}
+
+.info::before {
+  content: 'ⓘ';
+  margin-right: 0.5em;
+}
+
+.warning {
+  background-color: #f0e498;
+}
+
+.warning::before {
+  content: '⚠️';
+  margin-right: 0.5em;
+}
+
+.alert {
+  background-color: rgba(208, 56, 62, 0.3);
+}
+
+.alert::before {
+  content: '✕';
+  margin-right: 0.5em;
+}
+
+/**
+ * Carbon Ads
+ * https://www.carbondesignsystem.com/resources/ads
+ */
+
+#carbonads * {
+  margin: initial;
+  padding: initial;
+}
+
+#carbonads {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+    Oxygen-Sans, Ubuntu, Cantarell, 'Helvetica Neue', Helvetica, Arial,
+    sans-serif;
+}
+
+#carbonads {
+  display: flex;
+  max-width: 330px;
+  background-color: hsl(0, 0%, 98%);
+  background-color: var(--bg-color);
+  box-shadow: 0 1px 4px 1px hsla(0, 0%, 0%, 0.1);
+  z-index: 100;
+  position: absolute;
+  right: 1rem;
+  top: 2rem;
+}
+
+@media (min-width: 640px) {
+  #carbonads {
+    right: 4rem;
+  }
+}
+
+@media (min-width: 900px) {
+  #carbonads {
+    right: 8rem;
+  }
+}
+
+@media (prefers-color-scheme: dark) {
+  .warning {
+    color: #000;
+  }
+
+  #carbonads {
+    background-color: var(--bg-color-elevation1);
+  }
+}
+
+#carbonads a {
+  color: var(--text-color);
+  text-decoration: none;
+}
+
+#carbonads span {
+  position: relative;
+  display: block;
+  overflow: hidden;
+}
+
+#carbonads .carbon-wrap {
+  display: flex;
+}
+
+#carbonads .carbon-img {
+  display: block;
+  margin: 0;
+  line-height: 1;
+}
+
+#carbonads .carbon-img img {
+  display: block;
+}
+
+#carbonads .carbon-text {
+  font-size: 13px;
+  padding: 10px;
+  margin-bottom: 16px;
+  line-height: 1.5;
+  text-align: left;
+}
+
+#carbonads .carbon-poweredby {
+  display: block;
+  padding: 6px 8px;
+  background: #f1f1f2;
+  color: var(--text-color-light);
+  text-align: center;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  font-weight: 600;
+  font-size: 8px;
+  line-height: 1;
+  border-top-left-radius: 3px;
+  position: absolute;
+  bottom: 0;
+  right: 0;
+}
+
+@media (prefers-color-scheme: dark) {
+  #carbonads .carbon-poweredby {
+    background-color: var(--interactive);
+    color: var(--text-color);
+  }
+}
+
+@media only screen and (min-width: 320px) and (max-width: 759px) {
+  #ads {
+    margin-bottom: 4rem;
+  }
+
+  #carbonads {
+    float: initial;
+    position: relative;
+    right: initial;
+    bottom: initial;
+    margin: 0 auto;
+    margin-bottom: 2rem;
+
+    max-width: 330px;
+  }
+
+  #carbonads .carbon-wrap {
+    display: flex;
+
+    flex-direction: row;
+  }
+
+  #carbonads .carbon-img {
+    margin: 0;
+  }
+
+  #carbonads .carbon-text {
+    padding: 10px 10px 0 10px;
+
+    font-size: 12px;
+  }
+
+  #carbonads .carbon-poweredby {
+    position: absolute;
+    right: 0;
+    bottom: 0;
+
+    text-align: center;
+    border-radius: 0;
+    border-top-left-radius: 3px;
+  }
+}
