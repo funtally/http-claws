@@ -31,7 +31,7 @@ import httpx
 import numpy as np
 from PIL import Image as imagelib
 
-CACHE_DIR = Path(".boxed-cats/")
+CACHE_DIR = Path(".purrr_cache/")
 CAT_DIR = Path("cats/")
 
 pixel_counts_var: ContextVar[dict[int, int]] = ContextVar("pixel_counts")
