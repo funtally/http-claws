@@ -14,44 +14,138 @@
 # ///
 
 import os
-from collections.abc import Callable, Iterable
 from collections import deque
+from collections.abc import Callable, Iterable
 from concurrent.futures import ThreadPoolExecutor
-from contextvars import ContextVar
+from contextlib import suppress
+from contextvars import Context, ContextVar, copy_context
+from dataclasses import dataclass, field
 from functools import partial
 from http.client import responses
 from io import BytesIO
 from itertools import chain, product
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar, Literal, NamedTuple, Self, cast
 
 import httpx
 from PIL import Image as imagelib
 
 CACHE_DIR = Path(".boxed-cats/")
 CAT_DIR = Path("cats/")
-INTERNET_CAT_URL_TEMPLATE = "https://http.cat/{}"
 
 pixel_counts_var: ContextVar[dict[int, int]] = ContextVar("pixel_counts")
-cat_id_var: ContextVar[int] = ContextVar("cat_id")
+code_var: ContextVar[int] = ContextVar("cat_id")
 
 # early bindings
-get_pixel_tracker = pixel_counts_var.get
-get_cat_id = cat_id_var.get
+get_pixel_counts = pixel_counts_var.get
+get_code = code_var.get
 
 consume: Callable[[Iterable[Any]], Any] = partial(deque, maxlen=0)
+# pass messages ending with "\n" for no print buffer collisions
+atomic_print = partial(print, end="")
 
 is_bright_enough = (100, 100, 100).__lt__
 is_dark_enough = (100, 100, 100).__ge__
 
 
-def get_box_vertices(
+class CatManager(NamedTuple):
+    cache: Path = CACHE_DIR
+    shelter: Path = CAT_DIR
+
+
+@dataclass
+class Cat:
+    code: int
+    filename: str
+    image: imagelib.Image
+    mgr: CatManager
+
+    context: Context = field(default_factory=copy_context)
+
+    _url_template: ClassVar[str] = "https://http.cat/{}"
+
+    @property
+    def url(self) -> str:
+        return self._url_template.format(self.filename)
+
+    @property
+    def shelter(self) -> Path:
+        return self.mgr.shelter / self.filename
+
+    @classmethod
+    def fetch(
+        cls, code: int, mgr: CatManager, pixel_counts: dict[int, int] | None = None
+    ) -> Self:
+        code_var.set(code)
+        if pixel_counts is not None:
+            # cat ids are keys, hence no race conditions
+            pixel_counts_var.set(pixel_counts)
+        filename = f"{code}.jpg"
+        try:
+            box = (cache_fn := mgr.cache / filename).read_bytes()
+            atomic_print(
+                f"🛈 Pulled the Schroedinger cat in danger called {filename} from the cache "
+                "to not make Schroedinger angry\n",
+            )
+        except FileNotFoundError:  # the cat contents weren't found in our cache
+            box_room = httpx.get(cls._url_template.format(filename))
+            box = box_room.read()  # find the box in the room
+            cache_fn.write_bytes(box)
+            atomic_print(
+                f"🛈 Pulled the Schroedinger cat in danger called {filename} "
+                "from the Internet and saved its contents in our cache\n",
+            )
+
+        image = imagelib.open(BytesIO(box))  # let's view our box cat as an image
+        return cls(code, filename, image, mgr=mgr)
+
+    def get_catful_frame(self) -> imagelib.Image:
+        """Return the cropped image of the cat frame only with cat in it."""
+        box = get_frame_vertices(
+            self.image.size,
+            self.image.load(),
+            predicate=is_bright_enough,
+        )
+        return self.image.crop(box)
+
+    def get_catless_frame(self) -> imagelib.Image:
+        """Return the cropped image of the cat frame only without cat in it."""
+        # we'll modify it in-place
+        catless_frame = self.get_catful_frame()
+        pixels = catless_frame.load()
+        width, height = catless_frame.size
+        left, top, right, bottom = get_frame_vertices(
+            (width, height),
+            pixels,
+            predicate=is_dark_enough,
+        )
+        for x, y in product(range(left, right), range(top, bottom)):
+            catless_frame.putpixel((x, y), (0, 0, 0, 0))  # todo: any faster way?
+        return catless_frame
+
+    def save(
+        self, what: Literal["full", "frame", "emptyframe"], *, where: Path | None = None
+    ) -> None:
+        match what:
+            case "full":
+                image = self.image
+            case "frame":
+                image = self.get_catful_frame()
+            case "emptyframe":
+                image = self.get_catless_frame()
+        image.save(where := where or self.shelter)
+        atomic_print(
+            f"✔ The cat named {self.filename} was saved! (In {where}, in its {what} form)\n"
+        )
+
+
+def get_frame_vertices(
     image_size: tuple[int, int],
     pixels: Any,
     predicate: Callable[[tuple[int, int, int]], bool],
-) -> tuple[int, ...]:
+) -> tuple[int, int, int, int]:
     """
-    Find the vertices of the box where the cat is trapped.
+    Find the vertices of the frame where the cat is trapped.
 
     Parameters
     ----------
@@ -59,6 +153,8 @@ def get_box_vertices(
         Tuple containing the width and height of the image.
     pixels
         Pixel data of the image.
+    predicate
+        Predicate that tells which pixels signify frame edge.
 
     Returns
     -------
@@ -66,11 +162,9 @@ def get_box_vertices(
         A tuple (left, top, right, bottom) representing the boundary indices.
     """
     axes = [image_size[1] // 2, 0]  # y, x
-    vertices: tuple[list[int], list[int]] = (
-        [],
-        [],
-    )  # convenient, chainable structure: #0->(left, top), #1->(right, low)
-    pixel_tracker = axis = 0
+    # convenient, chainable structure: #0->(left, top), #1->(right, low)
+    vertices: tuple[list[int], list[int]] = ([], [])
+    pixel_count = axis = 0
 
     for axis, other_axis_value in enumerate(axes):
         other_axis = (axis + 1) % 2
@@ -87,7 +181,7 @@ def get_box_vertices(
                     if key == 1:
                         break
                     continue
-                pixel_tracker += 1
+                pixel_count += 1
                 if predicate(
                     pixels[
                         (axis_value, other_axis_value)
@@ -100,114 +194,37 @@ def get_box_vertices(
             if n_filled == 2:
                 break
 
-    get_pixel_tracker()[get_cat_id()] = pixel_tracker
-    return tuple(chain.from_iterable(vertices))
-
-
-def extract_frame(image: imagelib.Image) -> imagelib.Image:
-    """
-    Dynamically detect the frame of the image and make its inside transparent.
-
-    Parameters
-    ----------
-    image
-        The input image.
-
-    Returns
-    -------
-    imagelib.Image
-        A new image with the detected frame made transparent.
-    """
-    pixels = image.load()
-    width, height = image.size
-
-    left, top, right, bottom = get_box_vertices(
-        (width, height), pixels, predicate=is_dark_enough
-    )
-
-    for x, y in product(range(left, right), range(top, bottom)):
-        image.putpixel((x, y), (0, 0, 0, 0))  # todo: any faster way?
-
-    return image
-
-
-def get_schroedinger_cat_box(
-    cat_name: str,
-    *,
-    cache_dir: Path = CACHE_DIR,
-) -> imagelib.Image:
-    """
-    Check if we have our boxed cat in the cache or download it from the Internet.
-    """
-    try:
-        box = (cache_fn := cache_dir / cat_name).read_bytes()
-        print(
-            f"🛈 Pulled the Schroedinger cat in danger called {cat_name} from the cache "
-            "to not make Schroedinger angry\n",
-            end="",
-        )
-    except FileNotFoundError:  # the cat contents weren't found in our cache
-        box_room = httpx.get(INTERNET_CAT_URL_TEMPLATE.format(cat_name))
-        box = box_room.read()  # find the box in the room
-        cache_fn.write_bytes(box)
-        print(
-            f"🛈 Pulled the Schroedinger cat in danger called {cat_name} "
-            "from the Internet and saved its contents in our cache\n",
-            end="",
-        )
-    return imagelib.open(BytesIO(box))  # let's view our box cat as an image
-
-
-def unbox_schroedinger_cat(image: imagelib.Image) -> imagelib.Image:
-    """
-    Unbox the cat (50% chance of survival).
-    """
-    return image.crop(
-        get_box_vertices(image.size, image.load(), predicate=is_bright_enough)  # type: ignore[arg-type]
-    )
-
-
-def save_cat(
-    cat_id: int,
-    *,
-    cache_dir: Path = CACHE_DIR,
-    dest_dir: Path = CAT_DIR,
-    pixel_counts: dict[int, int] | None = None,
-) -> None:
-    # unique for every thread
-    cat_id_var.set(cat_id)
-    cat_name = f"{cat_id}.jpg"
-
-    if pixel_counts is not None:
-        # cat ids are keys, hence no race conditions
-        pixel_counts_var.set(pixel_counts)
-
-    shelter = dest_dir / cat_name
-    print(f"🛈 Downloading a cat named {cat_name} to {shelter}\n", end="")
-
-    box = get_schroedinger_cat_box(cat_name, cache_dir=cache_dir)
-    cat = unbox_schroedinger_cat(box)
-
-    # ↓ here we're saving the cat!
-    cat.save(shelter)  # type: ignore[arg-type]  # this is correct, shelter *should match* PathLike[str]
-    print(f"✔ The cat named {cat_name} was saved! (In {shelter})\n", end="")
-
-    if cat_id == 100:  # todo: formalize? control via a parameter?
-        frame = extract_frame(cat.copy())
-        # ↑ we'll probably detect boundaries dynamically as we do with detecting the frame itself
-        # we assume the frame has minimum 1px border but we can support arbitrary dynamic width
-        frame.save(frame_fn := dest_dir / "frame.png")
-        print(f"✔ Frame saved to {frame_fn}!\n", end="")
+    with suppress(LookupError):
+        get_pixel_counts()[get_code()] = pixel_count
+    return cast("tuple[int, int, int, int]", tuple(chain.from_iterable(vertices)))
 
 
 def save_cats() -> None:
     pixel_counts: dict[int, int] = {}
+    mgr = CatManager()
 
     with ThreadPoolExecutor(
         max_workers=8,
         thread_name_prefix="cat-saving-thread-",
     ) as executor:
-        executor.map(partial(save_cat, pixel_counts=pixel_counts), map(int, responses))
+        cat_generator = executor.map(
+            partial(Cat.fetch, mgr=mgr),
+            map(int, responses),
+        )
+        first_cat = next(cat_generator)
+        executor.submit(
+            first_cat.context.run,
+            first_cat.save,
+            what="emptyframe",
+            where=mgr.shelter / "frame.png",
+        ).result()
+        executor.map(
+            next,
+            (
+                cat.context.run(cat.save, what="frame")
+                for cat in chain([first_cat], cat_generator)
+            ),
+        )
 
 
 if __name__ == "__main__":
