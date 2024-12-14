@@ -1,4 +1,4 @@
-# Interactive HTTP Cats
+# http-claws
 Turn learning HTTP status codes into a fun and interactive game with [http.cat](https://http.cat)!
 
 # Fun Facts
