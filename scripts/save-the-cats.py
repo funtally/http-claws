@@ -10,7 +10,7 @@
 
 # /// script
 # requires-python = ">=3.13"
-# dependencies = ["httpx", "pillow"]
+# dependencies = ["httpx", "numpy", "pillow"]
 # ///
 
 import os
@@ -23,11 +23,12 @@ from dataclasses import dataclass, field
 from functools import partial
 from http.client import responses
 from io import BytesIO
-from itertools import chain, product
+from itertools import chain
 from pathlib import Path
 from typing import Any, ClassVar, Literal, NamedTuple, Self, cast
 
 import httpx
+import numpy as np
 from PIL import Image as imagelib
 
 CACHE_DIR = Path(".boxed-cats/")
@@ -110,18 +111,17 @@ class Cat:
 
     def get_catless_frame(self) -> imagelib.Image:
         """Return the cropped image of the cat frame only without cat in it."""
-        # we'll modify it in-place
-        catless_frame = self.get_catful_frame()
-        pixels = catless_frame.load()
-        width, height = catless_frame.size
+        cat_frame = self.get_catful_frame()
+        cat_frame_array = np.array(cat_frame.convert("RGBA"))
+        height, width, _ = cat_frame_array.shape
+        pixels = cat_frame.load()
         left, top, right, bottom = get_frame_vertices(
             (width, height),
             pixels,
             predicate=is_dark_enough,
         )
-        for x, y in product(range(left, right), range(top, bottom)):
-            catless_frame.putpixel((x, y), (0, 0, 0, 0))  # todo: any faster way?
-        return catless_frame
+        cat_frame_array[top:bottom, left:right, :] = [0, 0, 0, 0]
+        return imagelib.fromarray(cat_frame_array)
 
     def save(
         self, what: Literal["full", "frame", "emptyframe"], *, where: Path | None = None
@@ -208,7 +208,7 @@ def save_cats() -> None:
         thread_name_prefix="cat-saving-thread-",
     ) as executor:
         cat_generator = executor.map(
-            partial(Cat.fetch, mgr=mgr),
+            partial(Cat.fetch, mgr=mgr, pixel_counts=pixel_counts),
             map(int, responses),
         )
         first_cat = next(cat_generator)
