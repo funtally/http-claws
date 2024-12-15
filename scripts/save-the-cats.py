@@ -14,6 +14,7 @@
 # ///
 
 import os
+import sys
 from collections import deque
 from collections.abc import Callable, Iterable
 from concurrent.futures import ThreadPoolExecutor
@@ -21,9 +22,11 @@ from contextlib import suppress
 from contextvars import Context, ContextVar, copy_context
 from dataclasses import dataclass, field
 from functools import partial
+from hashlib import md5
 from http.client import responses
 from io import BytesIO
 from itertools import chain
+from operator import attrgetter
 from pathlib import Path
 from typing import Any, ClassVar, Literal, NamedTuple, Self, cast
 
@@ -32,7 +35,7 @@ import numpy as np
 from PIL import Image as imagelib
 
 CACHE_DIR = Path(".purrr_cache/")
-CAT_DIR = Path("cats/")
+CAT_DIR = Path("static/cats/")
 
 pixel_counts_var: ContextVar[dict[int, int]] = ContextVar("pixel_counts")
 code_var: ContextVar[int] = ContextVar("cat_id")
@@ -173,7 +176,7 @@ def get_frame_vertices(
         for dist in range(dim):
             # key: #0, #1
             n_filled = 0
-           # we check both lhs and rhs 'at the same time'
+            # we check both lhs and rhs 'at the same time'
             for key, axis_value in enumerate((dist, dim - dist - 1)):
                 # only feed vertices one item per list for every axis
                 n_filled += (filled := len(vertices[key]) > axis)
@@ -199,7 +202,7 @@ def get_frame_vertices(
     return cast("tuple[int, int, int, int]", tuple(chain.from_iterable(vertices)))
 
 
-def save_cats() -> None:
+def save_cats(where: Callable[[Cat], Path] | None = None) -> None:
     pixel_counts: dict[int, int] = {}
     mgr = CatManager()
 
@@ -221,13 +224,22 @@ def save_cats() -> None:
         executor.map(
             next,
             (
-                cat.context.run(cat.save, what="frame")
+                cat.context.run(
+                    cat.save, what="frame", where=(where or attrgetter("shelter"))(cat)
+                )
                 for cat in chain([first_cat], cat_generator)
             ),
         )
 
 
+def hashed_fn(cat: Cat) -> Path:
+    return (
+        cat.mgr.shelter
+        / f"{md5(str(cat.code).encode(), usedforsecurity=False).hexdigest()}.jpg"
+    )
+
+
 if __name__ == "__main__":
     os.makedirs(CAT_DIR, exist_ok=True)
     os.makedirs(CACHE_DIR, exist_ok=True)
-    save_cats()
+    save_cats(where=hashed_fn if "--hashed" in sys.argv else None)
