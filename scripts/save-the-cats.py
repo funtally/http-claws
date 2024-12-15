@@ -35,7 +35,7 @@ import numpy as np
 from PIL import Image as imagelib
 
 CACHE_DIR = Path(".purrr_cache/")
-CAT_DIR = Path("static/static/cats/")
+CAT_DIR = Path("static/cats/")
 
 pixel_counts_var: ContextVar[dict[int, int]] = ContextVar("pixel_counts")
 code_var: ContextVar[int] = ContextVar("cat_id")
@@ -66,7 +66,7 @@ class Cat:
 
     context: Context = field(default_factory=copy_context)
 
-    _url_template: ClassVar[str] = "https://http.cat/{}"
+    _url_template: ClassVar[str] = "https://http.cat/images-original/{}"
 
     @property
     def url(self) -> str:
