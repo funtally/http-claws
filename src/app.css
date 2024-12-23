@@ -1,7 +1,8 @@
 /**
-Insolently copied from <https://github.com/httpstatic/cats/http.cat/blob/7881933d93389c028a350bd7ff81590fa1e25301/app/globals.css>.
+Adopted from <https://github.com/httpstatic/cats/http.cat/blob/7881933d93389c028a350bd7ff81590fa1e25301/app/globals.css>.
 
 Copyright (c) 2015 Rogério Vicente
+Copyright (c) 2024 Bartosz Sławecki
 
 Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"),
 to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense,
@@ -43,9 +44,14 @@ WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN 
   }
 }
 
+html,
 body {
   margin: 0;
   padding: 0;
+  height: 100%;
+}
+
+body {
   font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
     Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
   letter-spacing: 0;
@@ -64,6 +70,10 @@ code {
 p {
   margin-top: 1em;
   margin-bottom: 1em;
+}
+
+a {
+  color: hsl(0, 0%, 80%);
 }
 
 .info {
