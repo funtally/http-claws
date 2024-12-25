@@ -23,7 +23,7 @@ from contextvars import Context, ContextVar, copy_context
 from dataclasses import dataclass, field
 from functools import partial
 from hashlib import md5
-from http.client import responses
+from http.client import responses as http_responses
 from io import BytesIO
 from itertools import chain
 from operator import attrgetter
@@ -93,6 +93,10 @@ class Cat:
             )
         except FileNotFoundError:  # the cat contents weren't found in our cache
             box_room = httpx.get(cls._url_template.format(filename))
+            try:
+                box_room.raise_for_status()
+            except httpx.HTTPStatusError as status_err:
+                raise status_err from None
             box = box_room.read()  # find the box in the room
             cache_fn.write_bytes(box)
             atomic_print(
@@ -102,6 +106,20 @@ class Cat:
 
         image = imagelib.open(BytesIO(box))  # let's view our box cat as an image
         return cls(code, filename, image, mgr=mgr)
+
+    @classmethod
+    def fetch_or_none(
+        cls, code: int, mgr: CatManager, pixel_counts: dict[int, int] | None = None
+    ) -> Self:
+        try:
+            return cls.fetch(code=code, mgr=mgr, pixel_counts=pixel_counts)
+        except httpx.HTTPStatusError as err:
+            atomic_print(
+                f"🛈 Error pulling the Schroedinger cat {code} from the Internet "
+                f"(https://http.cat/status/{err.response.status_code})\n",
+                file=sys.stderr,
+            )
+            return None
 
     def get_catful_frame(self) -> imagelib.Image:
         """Return the cropped image of the cat frame only with cat in it."""
@@ -210,9 +228,16 @@ def save_cats(where: Callable[[Cat], Path] | None = None) -> None:
         max_workers=8,
         thread_name_prefix="cat-saving-thread-",
     ) as executor:
-        cat_generator = executor.map(
-            partial(Cat.fetch, mgr=mgr, pixel_counts=pixel_counts),
-            map(int, responses),
+        cat_generator = filter(
+            None,
+            executor.map(
+                partial(
+                    Cat.fetch_or_none,
+                    mgr=mgr,
+                    pixel_counts=pixel_counts,
+                ),
+                map(int, http_responses),
+            ),
         )
         first_cat = next(cat_generator)
         executor.submit(
@@ -225,7 +250,9 @@ def save_cats(where: Callable[[Cat], Path] | None = None) -> None:
             next,
             (
                 cat.context.run(
-                    cat.save, what="frame", where=(where or attrgetter("shelter"))(cat)
+                    cat.save,
+                    what="frame",
+                    where=(where or attrgetter("shelter"))(cat),
                 )
                 for cat in chain([first_cat], cat_generator)
             ),

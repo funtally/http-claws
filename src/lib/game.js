@@ -2,7 +2,7 @@ import md5 from 'crypto-js/md5';
 import { StatusCodes } from 'http-status-codes';
 
 const IMAGE_URI_TEMPLATE = "cats/{}.jpg";
-const EXCLUDED_CODES = ["419", "420"];
+const EXCLUDED_CODES = ["419", "420", "505"];
 const UPPERCASE_WORDS = ["URI", "HTTP", "OK"];
 const HTTP_CODES = Object.keys(StatusCodes).filter(key => key.length == 3);
 EXCLUDED_CODES.forEach(code => HTTP_CODES.splice(HTTP_CODES.indexOf(code), 1));
